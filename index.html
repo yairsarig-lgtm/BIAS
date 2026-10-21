@@ -88,7 +88,7 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .card .art{flex:0 1 auto;max-height:72vh;max-width:min(88vw,520px);aspect-ratio:2/3;border-radius:10px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.65),0 0 0 1px rgba(255,255,255,.06)}
 .card .art img{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}
 .hidden-meta .meta{display:none}
-.corner{position:absolute;left:0;top:0;width:72px;height:72px;z-index:2}
+.corner{position:absolute;left:0;top:0;width:96px;height:calc(96px + env(safe-area-inset-top,0px));z-index:3;touch-action:none;-webkit-touch-callout:none}
 .dot{position:absolute;right:calc(12px + env(safe-area-inset-right,0px));bottom:calc(12px + env(safe-area-inset-bottom,0px));width:6px;height:6px;border-radius:50%;background:#fff;opacity:.0;z-index:2;transition:opacity .2s}
 .dot.on{opacity:.18}
 .dot.armed{opacity:.35;background:#e8b84a}
@@ -134,7 +134,7 @@ body{margin:0;-webkit-user-select:none;user-select:none;overscroll-behavior:none
     <div class="row"><div class="l"><span>Show title and year</span><small>Above each poster</small></div><input type="checkbox" class="sw" id="meta"></div>
     <div class="row"><div class="l"><span>Only famous movies before the force</span><small>No number-word film shows up until the forced spin</small></div><input type="checkbox" class="sw" id="decoyFirst"></div>
     <div class="row"><div class="l"><span>Secret status dot</span><small>Faint dot, bottom right: gold = next spin is forced, green = landed</small></div><input type="checkbox" class="sw" id="dotOn"></div>
-    <p class="hint">During the show, press and hold the top-left corner for 2 seconds to come back here.</p>
+    <p class="hint">During the show, hold the top-left corner for 1.5 seconds, or tap it 3 times quickly, to come back here. On Android the back button works too.</p>
     <button class="btn go" id="closeSettings" type="button">Done</button>
   </div>
 </div>
@@ -312,10 +312,23 @@ function endDrag(e){
 show.addEventListener('pointerup',endDrag);
 show.addEventListener('pointercancel',endDrag);
 
-/* hidden exit: hold top-left corner for 2 s */
-const corner=document.getElementById('corner'),ring=document.getElementById('ring');let holdT=null;
-corner.addEventListener('pointerdown',e=>{e.stopPropagation();ring.classList.add('hold');holdT=setTimeout(exitShow,2000)});
-['pointerup','pointercancel','pointerleave'].forEach(ev=>corner.addEventListener(ev,()=>{clearTimeout(holdT);ring.classList.remove('hold')}));
+/* hidden exits: hold the top-left corner for 1.5 s, or tap it 3 times quickly; on Android the back button also works */
+const corner=document.getElementById('corner'),ring=document.getElementById('ring');let holdT=null,taps=[];
+function holdStart(e){
+  e.stopPropagation();if(e.cancelable)e.preventDefault();
+  const now=Date.now();taps=taps.filter(t=>now-t<900);taps.push(now);
+  if(taps.length>=3){taps=[];exitShow();return}
+  clearTimeout(holdT);ring.classList.add('hold');holdT=setTimeout(exitShow,1500);
+}
+function holdEnd(){clearTimeout(holdT);ring.classList.remove('hold')}
+corner.addEventListener('touchstart',holdStart,{passive:false});
+corner.addEventListener('touchend',holdEnd);corner.addEventListener('touchcancel',holdEnd);
+corner.addEventListener('mousedown',holdStart);corner.addEventListener('mouseup',holdEnd);corner.addEventListener('mouseleave',holdEnd);
+corner.addEventListener('pointerdown',e=>e.stopPropagation());
+corner.addEventListener('contextmenu',e=>e.preventDefault());
+show.addEventListener('contextmenu',e=>e.preventDefault());
+/* Android app: its back button clicks an element with id "back" when one exists, so one exists only during the show */
+const backBtn=document.createElement('button');backBtn.id='back';backBtn.type='button';backBtn.hidden=true;backBtn.tabIndex=-1;backBtn.onclick=()=>exitShow();
 
 /* keyboard for desktop rehearsal: arrows move one poster, Esc exits */
 document.addEventListener('keydown',e=>{
@@ -332,12 +345,14 @@ function startShow(){
   stage.replaceChildren();nodes.clear();
   show.classList.toggle('hidden-meta',!S.meta);
   show.hidden=false;document.getElementById('setup').hidden=true;
+  document.body.appendChild(backBtn);
   render();setDot();
   try{const r=document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen();if(r&&r.catch)r.catch(()=>{})}catch(_){}
 }
 function exitShow(){
   clearTimeout(holdT);ring.classList.remove('hold');cancelAnimationFrame(anim);
   show.hidden=true;document.getElementById('setup').hidden=false;
+  backBtn.remove();
   try{if(document.fullscreenElement)document.exitFullscreen().catch(()=>{})}catch(_){}
 }
 document.getElementById('start').onclick=startShow;
